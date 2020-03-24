@@ -21,6 +21,4 @@ public class VoxelGridSurface : MonoBehaviour
         rowCacheMax = new int[resolution * 2 + 1];
         rowCacheMin = new int[resolution * 2 + 1];
     }
-
 }
-

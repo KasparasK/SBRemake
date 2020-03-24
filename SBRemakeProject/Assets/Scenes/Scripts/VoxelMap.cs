@@ -19,6 +19,9 @@ public class VoxelMap : MonoBehaviour
         new VoxelStencilCircle()
     };
     public Transform[] stencilVisualizations;
+
+    public float maxFeatureAngle = 135f;
+
     #region GUI
 
     private static string[] fillTypeNames = { "Filled", "Empty" };
@@ -134,7 +137,7 @@ public class VoxelMap : MonoBehaviour
     private void CreateChunk(int i, int x, int y)
     {
         VoxelGrid chunk = Instantiate(voxelGridPrefab) as VoxelGrid;
-        chunk.Initialize(voxelResolution, chunkSize);
+        chunk.Initialize(voxelResolution, chunkSize, maxFeatureAngle);
         chunk.transform.parent = transform;
         chunk.transform.localPosition = new Vector3(x * chunkSize - halfSize, y * chunkSize - halfSize);
         chunks[i] = chunk;

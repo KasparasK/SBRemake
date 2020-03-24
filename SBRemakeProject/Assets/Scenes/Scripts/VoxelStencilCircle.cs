@@ -34,6 +34,7 @@ public class VoxelStencilCircle : VoxelStencil
                 if (xMin.xEdge == float.MinValue || xMin.xEdge < x)
                 {
                     xMin.xEdge = x;
+                    xMin.xNormal = ComputeNormal(x, xMin.position.y);
                 }
             }
         }
@@ -46,6 +47,7 @@ public class VoxelStencilCircle : VoxelStencil
                 if (xMin.xEdge == float.MinValue || xMin.xEdge > x)
                 {
                     xMin.xEdge = x;
+                    xMin.xNormal = ComputeNormal(x, xMin.position.y);
                 }
             }
         }
@@ -64,6 +66,7 @@ public class VoxelStencilCircle : VoxelStencil
                 if (yMin.yEdge == float.MinValue || yMin.yEdge < y)
                 {
                     yMin.yEdge = y;
+                    yMin.yNormal = ComputeNormal(yMin.position.x, y);
                 }
             }
         }
@@ -76,8 +79,21 @@ public class VoxelStencilCircle : VoxelStencil
                 if (yMin.yEdge == float.MinValue || yMin.yEdge > y)
                 {
                     yMin.yEdge = y;
+                    yMin.yNormal = ComputeNormal(yMin.position.x, y);
                 }
             }
+        }
+    }
+
+    private Vector3 ComputeNormal(float x, float y)
+    {
+        if (fillType)
+        {
+            return new Vector2(x - centerX, y - centerY).normalized;
+        }
+        else
+        {
+            return new Vector2(centerX - x, centerY - y).normalized;
         }
     }
 }

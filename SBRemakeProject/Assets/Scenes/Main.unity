@@ -370,7 +370,7 @@ Transform:
   m_GameObject: {fileID: 1002950425}
   m_LocalRotation: {x: 0.7071068, y: -0, z: -0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 0.10000001, z: 1}
+  m_LocalScale: {x: 1, y: 0.01, z: 1}
   m_Children: []
   m_Father: {fileID: 1806837820}
   m_RootOrder: 1
@@ -541,7 +541,7 @@ Transform:
   m_GameObject: {fileID: 1798848193}
   m_LocalRotation: {x: 0.7071068, y: -0, z: -0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 0.10000001, z: 1}
+  m_LocalScale: {x: 1, y: 0.01, z: 1}
   m_Children: []
   m_Father: {fileID: 1806837820}
   m_RootOrder: 0
@@ -583,6 +583,7 @@ MonoBehaviour:
   stencilVisualizations:
   - {fileID: 1798848197}
   - {fileID: 1002950428}
+  maxFeatureAngle: 135
 --- !u!4 &1806837820
 Transform:
   m_ObjectHideFlags: 0

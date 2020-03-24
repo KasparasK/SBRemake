@@ -4,11 +4,27 @@ using System;
 [Serializable]
 public class Voxel
 {
+    public Vector2 XEdgePoint
+    {
+        get
+        {
+            return new Vector2(xEdge, position.y);
+        }
+    }
+
+    public Vector2 YEdgePoint
+    {
+        get
+        {
+            return new Vector2(position.x, yEdge);
+        }
+    }
 
     public bool state;
 
     public Vector2 position;
     public float xEdge, yEdge;
+    public Vector2 xNormal, yNormal;
     public Voxel(int x, int y, float size)
     {
         position.x = (x + 0.5f) * size;
@@ -29,6 +45,7 @@ public class Voxel
 
         xEdge = voxel.xEdge + offset;
         yEdge = voxel.yEdge;
+        yNormal = voxel.yNormal;
     }
 
     public void BecomeYDummyOf(Voxel voxel, float offset)
@@ -39,6 +56,7 @@ public class Voxel
 
         xEdge = voxel.xEdge;
         yEdge = voxel.yEdge + offset;
+        xNormal = voxel.xNormal;
     }
 
     	public void BecomeXYDummyOf (Voxel voxel, float offset) {
