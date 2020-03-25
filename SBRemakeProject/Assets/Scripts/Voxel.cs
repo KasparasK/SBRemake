@@ -31,8 +31,8 @@ public class Voxel
         position.y = (y + 0.5f) * size;
 
 
-        xEdge = float.MinValue;
-        yEdge = float.MinValue;
+        xEdge = float.MinValue; // (x + 1) * size;
+        yEdge =  float.MinValue;//(y + 1) * size;
     }
 
     public Voxel() { }

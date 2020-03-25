@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 [SelectionBase]
 public class VoxelGrid : MonoBehaviour
 {
@@ -10,19 +9,15 @@ public class VoxelGrid : MonoBehaviour
 
     private Material[] voxelMaterials;
 
-    private Mesh mesh;
-
-    private List<Vector3> vertices;
-    private List<int> triangles;
-
     private Voxel[] voxels;
+    public VoxelGridSurface surfacePrefab;
+    private VoxelGridSurface surface;
+
+    public VoxelGridWall wallPrefab;
+    private VoxelGridWall wall;
 
     public VoxelGrid xNeighbor, yNeighbor, xyNeighbor;
-
     private Voxel dummyX, dummyY, dummyT;
-
-    private int[] rowCacheMax, rowCacheMin;
-    private int edgeCacheMin, edgeCacheMax;
     private float sharpFeatureLimit;
     public void Initialize(int resolution, float size, float maxFeatureAngle)
     {
@@ -46,24 +41,28 @@ public class VoxelGrid : MonoBehaviour
             }
         }
 
-        GetComponent<MeshFilter>().mesh = mesh = new Mesh();
-        mesh.name = "VoxelGrid Mesh";
-        vertices = new List<Vector3>();
-        triangles = new List<int>();
+        surface = Instantiate(surfacePrefab) as VoxelGridSurface;
+        surface.transform.parent = transform;
+        surface.transform.localPosition = Vector3.zero;
+        surface.Initialize(resolution);
 
-        rowCacheMax = new int[resolution * 2 + 1];
-        rowCacheMin = new int[resolution * 2 + 1];
+        wall = Instantiate(wallPrefab) as VoxelGridWall;
+        wall.transform.parent = transform;
+        wall.transform.localPosition = Vector3.zero;
+        wall.Initialize(resolution);
+
         Refresh();
     }
 
     private void CreateVoxel(int i, int x, int y)
     {
-        GameObject o = Instantiate(voxelPrefab) as GameObject;
+       GameObject o = Instantiate(voxelPrefab) as GameObject;
         o.transform.parent = transform;
         o.transform.localPosition = new Vector3((x + 0.5f) * voxelSize, (y + 0.5f) * voxelSize, -0.01f);
         o.transform.localScale = Vector3.one * voxelSize * 0.1f;
         voxelMaterials[i] = o.GetComponent<MeshRenderer>().material;
         voxels[i] = new Voxel(x, y, voxelSize);
+     //   voxels[i].state = true;
     }
 
     public void Apply(VoxelStencil stencil)
@@ -182,7 +181,7 @@ public class VoxelGrid : MonoBehaviour
     {
         for (int i = 0; i < voxels.Length; i++)
         {
-            voxelMaterials[i].color = voxels[i].state ? Color.black : Color.white;
+            voxelMaterials[i].color = voxels[i].state ? Color.red : Color.blue;
         }
     }
 
@@ -195,25 +194,19 @@ public class VoxelGrid : MonoBehaviour
     {
         if (voxel.state)
         {
-            rowCacheMax[0] = vertices.Count;
-            vertices.Add(voxel.position);
+            surface.CacheFirstCorner(voxel);
         }
     }
     private void CacheNextEdgeAndCorner(int i, Voxel xMin, Voxel xMax)
     {
         if (xMin.state != xMax.state)
         {
-            rowCacheMax[i + 1] = vertices.Count;
-            Vector3 p;
-            p.x = xMin.xEdge;
-            p.y = xMin.position.y;
-            p.z = 0f;
-            vertices.Add(p);
+            surface.CacheXEdge(i, xMin);
+            wall.CacheXEdge(i, xMin);
         }
         if (xMax.state)
         {
-            rowCacheMax[i + 2] = vertices.Count;
-            vertices.Add(xMax.position);
+            surface.CacheNextCorner(i, xMax);
         }
     }
     private void FillFirstRowCache()
@@ -222,19 +215,19 @@ public class VoxelGrid : MonoBehaviour
         int i;
         for (i = 0; i < resolution - 1; i++)
         {
-            CacheNextEdgeAndCorner(i * 2, voxels[i], voxels[i + 1]);
+            CacheNextEdgeAndCorner(i, voxels[i], voxels[i + 1]);
         }
         if (xNeighbor != null)
         {
             dummyX.BecomeXDummyOf(xNeighbor.voxels[0], gridSize);
-            CacheNextEdgeAndCorner(i * 2, voxels[i], dummyX);
+            CacheNextEdgeAndCorner(i, voxels[i], dummyX);
         }
     }
+
     private void Triangulate()
     {
-        vertices.Clear();
-        triangles.Clear();
-        mesh.Clear();
+        surface.Clear();
+        wall.Clear();
 
         if (xNeighbor != null)
         {
@@ -247,8 +240,9 @@ public class VoxelGrid : MonoBehaviour
         {
             TriangulateGapRow();
         }
-        mesh.vertices = vertices.ToArray();
-        mesh.triangles = triangles.ToArray();
+
+        surface.Apply();
+        wall.Apply();
     }
 
     private void TriangulateCellRows()
@@ -267,10 +261,9 @@ public class VoxelGrid : MonoBehaviour
                     b = voxels[i + 1],
                     c = voxels[i + resolution],
                     d = voxels[i + resolution + 1];
-                int cacheIndex = x * 2;
-                CacheNextEdgeAndCorner(cacheIndex, c, d);
+                CacheNextEdgeAndCorner(x, c, d);
                 CacheNextMiddleEdge(b, d);
-                TriangulateCell(cacheIndex, a, b, c, d);
+                TriangulateCell(x, a, b, c, d);
             }
             if (xNeighbor != null)
             {
@@ -280,22 +273,19 @@ public class VoxelGrid : MonoBehaviour
     }
     private void CacheNextMiddleEdge(Voxel yMin, Voxel yMax)
     {
-        edgeCacheMin = edgeCacheMax;
+        surface.PrepareCacheForNextCell();
+        wall.PrepareCacheForNextCell();
         if (yMin.state != yMax.state)
         {
-            edgeCacheMax = vertices.Count;
-            Vector3 p;
-            p.x = yMin.position.x;
-            p.y = yMin.yEdge;
-            p.z = 0f;
-            vertices.Add(p);
+            surface.CacheYEdge(yMin);
+            wall.CacheYEdge(yMin);
         }
     }
+
     private void SwapRowCaches()
     {
-        int[] rowSwap = rowCacheMin;
-        rowCacheMin = rowCacheMax;
-        rowCacheMax = rowSwap;
+        surface.PrepareCacheForNextRow();
+        wall.PrepareCacheForNextRow();
     }
     private void TriangulateGapCell(int i)
     {
@@ -303,7 +293,7 @@ public class VoxelGrid : MonoBehaviour
         dummySwap.BecomeXDummyOf(xNeighbor.voxels[i + 1], gridSize);
         dummyT = dummyX;
         dummyX = dummySwap;
-        int cacheIndex = (resolution - 1) * 2;
+        int cacheIndex = resolution - 1;
         CacheNextEdgeAndCorner(cacheIndex, voxels[i + resolution], dummyX);
         CacheNextMiddleEdge(dummyT, dummyX);
         TriangulateCell(cacheIndex, voxels[i], dummyT, voxels[i + resolution], dummyX);
@@ -324,19 +314,17 @@ public class VoxelGrid : MonoBehaviour
             dummySwap.BecomeYDummyOf(yNeighbor.voxels[x + 1], gridSize);
             dummyT = dummyY;
             dummyY = dummySwap;
-            int cacheIndex = x * 2;
-            CacheNextEdgeAndCorner(cacheIndex, dummyT, dummyY);
+            CacheNextEdgeAndCorner(x, dummyT, dummyY);
             CacheNextMiddleEdge(voxels[x + offset + 1], dummyY);
-            TriangulateCell(cacheIndex, voxels[x + offset], voxels[x + offset + 1], dummyT, dummyY);
+            TriangulateCell(x, voxels[x + offset], voxels[x + offset + 1], dummyT, dummyY);
         }
 
         if (xNeighbor != null)
         {
             dummyT.BecomeXYDummyOf(xyNeighbor.voxels[0], gridSize);
-            int cacheIndex = cells * 2;
-            CacheNextEdgeAndCorner(cacheIndex, dummyY, dummyT);
+            CacheNextEdgeAndCorner(cells, dummyY, dummyT);
             CacheNextMiddleEdge(dummyX, dummyT);
-            TriangulateCell(cacheIndex, voxels[voxels.Length - 1], dummyX, dummyY, dummyT);
+            TriangulateCell(cells, voxels[voxels.Length - 1], dummyX, dummyY, dummyT);
         }
     }
     private void TriangulateCell(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -396,7 +384,7 @@ public class VoxelGrid : MonoBehaviour
     }
     private void TriangulateCase15(int i, Voxel a, Voxel b, Voxel c, Voxel d)
     {
-        AddQuadABCD(i);
+        surface.AddQuadABCD(i);
     }
 
     private void TriangulateCase1(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -408,12 +396,13 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
             if (ClampToCellMaxMax(ref point, a, d))
             {
-                AddQuadA(i, point);
+                surface.AddQuadA(i, point);
+                wall.AddACAB(i, point);
                 return;
             }
         }
-        AddTriangleA(i);
-        
+        surface.AddTriangleA(i);
+        wall.AddACAB(i);
     }
 
     private void TriangulateCase2(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -425,11 +414,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
             if (ClampToCellMinMax(ref point, a, d))
             {
-                AddQuadB(i, point);
+                surface.AddQuadB(i, point);
+                wall.AddABBD(i, point);
                 return;
             }
         }
-        AddTriangleB(i);
+        surface.AddTriangleB(i);
+        wall.AddABBD(i);
+
     }
 
     private void TriangulateCase4(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -441,11 +433,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
             if (ClampToCellMaxMin(ref point, a, d))
             {
-                AddQuadC(i, point);
+                surface.AddQuadC(i, point);
+                wall.AddCDAC(i,point);
                 return;
             }
         }
-        AddTriangleC(i);
+        surface.AddTriangleC(i);
+        wall.AddCDAC(i);
+
     }
 
     private void TriangulateCase8(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -457,11 +452,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(c.XEdgePoint, n1, b.YEdgePoint, n2);
             if (ClampToCellMinMin(ref point, a, d))
             {
-                AddQuadD(i, point);
+                surface.AddQuadD(i, point);
+                wall.AddBDCD(i,point);
                 return;
             }
         }
-        AddTriangleD(i);
+        surface.AddTriangleD(i);
+        wall.AddBDCD(i);
+
     }
 
     private void TriangulateCase7(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -473,11 +471,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(c.XEdgePoint, n1, b.YEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddHexagonABC(i, point);
+                surface.AddHexagonABC(i, point);
+                wall.AddCDBD(i,point);
                 return;
             }
         }
-        AddPentagonABC(i);
+        surface.AddPentagonABC(i);
+        wall.AddCDBD(i);
+
     }
 
     private void TriangulateCase11(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -489,11 +490,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddHexagonABD(i, point);
+                surface.AddHexagonABD(i, point);
+                wall.AddACCD(i,point);
                 return;
             }
         }
-        AddPentagonABD(i);
+        surface.AddPentagonABD(i);
+        wall.AddACCD(i);
+
     }
 
     private void TriangulateCase13(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -505,11 +509,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddHexagonACD(i, point);
+                surface.AddHexagonACD(i, point);
+                wall.AddBDAB(i,point);
                 return;
             }
         }
-        AddPentagonACD(i);
+        surface.AddPentagonACD(i);
+        wall.AddBDAB(i);
+
     }
 
     private void TriangulateCase14(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -521,11 +528,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddHexagonBCD(i, point);
+                surface.AddHexagonBCD(i, point);
+                wall.AddABAC(i,point);
                 return;
             }
         }
-        AddPentagonBCD(i);
+        surface.AddPentagonBCD(i);
+        wall.AddABAC(i);
+
     }
 
     private void TriangulateCase3(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -537,11 +547,13 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.YEdgePoint, n1, b.YEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddPentagonAB(i, point);
+                surface.AddPentagonAB(i, point);
+                wall.AddACBD(i,point);
                 return;
             }
         }
-        AddQuadAB(i);
+        surface.AddQuadAB(i);
+        wall.AddACBD(i);
     }
 
     private void TriangulateCase5(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -553,11 +565,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, c.XEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddPentagonAC(i, point);
+                surface.AddPentagonAC(i, point);
+                wall.AddCDAB(i,point);
                 return;
             }
         }
-        AddQuadAC(i);
+        surface.AddQuadAC(i);
+        wall.AddCDAB(i);
+
     }
 
     private void TriangulateCase10(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -569,11 +584,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, c.XEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddPentagonBD(i, point);
+                surface.AddPentagonBD(i, point);
+                wall.AddABCD(i,point);
                 return;
             }
         }
-        AddQuadBD(i);
+        surface.AddQuadBD(i);
+        wall.AddABCD(i);
+
     }
 
     private void TriangulateCase12(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -585,11 +603,14 @@ public class VoxelGrid : MonoBehaviour
             Vector2 point = ComputeIntersection(a.YEdgePoint, n1, b.YEdgePoint, n2);
             if (IsInsideCell(point, a, d))
             {
-                AddPentagonCD(i, point);
+                surface.AddPentagonCD(i, point);
+                wall.AddBDAC(i,point);
                 return;
             }
         }
-        AddQuadCD(i);
+        surface.AddQuadCD(i);
+        wall.AddBDAC(i);
+
     }
 
     private void TriangulateCase6(int i, Voxel a, Voxel b, Voxel c, Voxel d)
@@ -598,7 +619,7 @@ public class VoxelGrid : MonoBehaviour
         Vector2 point1, point2;
 
         Vector2 n1 = a.xNormal;
-        Vector2 n2 = -b.yNormal;
+        Vector2 n2 = b.yNormal;
         if (IsSharpFeature(n1, n2))
         {
             point1 = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
@@ -611,7 +632,7 @@ public class VoxelGrid : MonoBehaviour
         }
 
         n1 = c.xNormal;
-        n2 = -a.yNormal;
+        n2 = a.yNormal;
         if (IsSharpFeature(n1, n2))
         {
             point2 = ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
@@ -629,23 +650,23 @@ public class VoxelGrid : MonoBehaviour
             {
                 if (IsBelowLine(point2, a.XEdgePoint, point1))
                 {
-                    if (
-                        IsBelowLine(point2, point1, b.YEdgePoint) ||
+                    if (IsBelowLine(point2, point1, b.YEdgePoint) ||
                         IsBelowLine(point1, point2, a.YEdgePoint))
                     {
                         TriangulateCase6Connected(i, a, b, c, d);
                         return;
                     }
                 }
-                else if (
-                    IsBelowLine(point2, point1, b.YEdgePoint) &&
-                    IsBelowLine(point1, c.XEdgePoint, point2))
+                else if (IsBelowLine(point2, point1, b.YEdgePoint) &&
+                         IsBelowLine(point1, c.XEdgePoint, point2))
                 {
                     TriangulateCase6Connected(i, a, b, c, d);
                     return;
                 }
-                AddQuadB(i, point1);
-                AddQuadC(i, point2);
+                surface.AddQuadB(i, point1);
+                wall.AddABBD(i, point1);
+                surface.AddQuadC(i, point2);
+                wall.AddCDAC(i, point2);
                 return;
             }
             if (IsBelowLine(point1, c.XEdgePoint, a.YEdgePoint))
@@ -653,65 +674,73 @@ public class VoxelGrid : MonoBehaviour
                 TriangulateCase6Connected(i, a, b, c, d);
                 return;
             }
-            AddQuadB(i, point1);
-            AddTriangleC(i);
+            surface.AddQuadB(i, point1);
+            wall.AddABBD(i, point1);
+            surface.AddTriangleC(i);
+            wall.AddCDAC(i);
             return;
         }
         if (sharp2)
         {
-            if (IsBelowLine(point2, a.XEdgePoint, point1))
-            {
-                if (
-                    IsBelowLine(point2, point1, b.YEdgePoint) ||
-                    IsBelowLine(point1, point2, a.YEdgePoint))
-                {
-                    TriangulateCase6Connected(i, a, b, c, d);
-                    return;
-                }
-            }
-            else if (
-                IsBelowLine(point2, point1, b.YEdgePoint) &&
-                IsBelowLine(point1, c.XEdgePoint, point2))
+            if (IsBelowLine(point2, a.XEdgePoint, b.YEdgePoint))
             {
                 TriangulateCase6Connected(i, a, b, c, d);
                 return;
             }
+            surface.AddTriangleB(i);
+            wall.AddABBD(i);
+            surface.AddQuadC(i, point2);
+            wall.AddCDAC(i, point2);
+            return;
         }
-        AddTriangleB(i);
-        AddTriangleC(i);
+        surface.AddTriangleB(i);
+        wall.AddABBD(i);
+        surface.AddTriangleC(i);
+        wall.AddCDAC(i);
     }
-    private void TriangulateCase6Connected(int i, Voxel a, Voxel b, Voxel c, Voxel d)
+
+    private void TriangulateCase6Connected(
+        int i, Voxel a, Voxel b, Voxel c, Voxel d)
     {
+
         Vector2 n1 = a.xNormal;
-        Vector2 n2 = -a.yNormal;
+        Vector2 n2 = a.yNormal;
         if (IsSharpFeature(n1, n2))
         {
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, a.YEdgePoint, n2);
-            if (IsInsideCell(point, a, d) && IsBelowLine(point, c.position, b.position))
+            if (IsInsideCell(point, a, d) &&
+                IsBelowLine(point, c.position, b.position))
             {
-                AddPentagonBCToA(i, point);
+                surface.AddPentagonBCToA(i, point);
+                wall.AddABAC(i, point);
             }
             else
             {
-                AddQuadBCToA(i);
+                surface.AddQuadBCToA(i);
+                wall.AddABAC(i);
             }
         }
         else
         {
-            AddQuadBCToA(i);
+            surface.AddQuadBCToA(i);
+            wall.AddABAC(i);
         }
+
         n1 = c.xNormal;
-        n2 = -b.yNormal;
+        n2 = b.yNormal;
         if (IsSharpFeature(n1, n2))
         {
             Vector2 point = ComputeIntersection(c.XEdgePoint, n1, b.YEdgePoint, n2);
-            if (IsInsideCell(point, a, d) && IsBelowLine(point, b.position, c.position))
+            if (IsInsideCell(point, a, d) &&
+                IsBelowLine(point, b.position, c.position))
             {
-                AddPentagonBCToD(i, point);
+                surface.AddPentagonBCToD(i, point);
+                wall.AddCDBD(i, point);
                 return;
             }
         }
-        AddQuadBCToD(i);
+        surface.AddQuadBCToD(i);
+        wall.AddCDBD(i);
     }
     private void TriangulateCase9(int i, Voxel a, Voxel b, Voxel c, Voxel d)
     {
@@ -750,23 +779,23 @@ public class VoxelGrid : MonoBehaviour
             {
                 if (IsBelowLine(point1, b.YEdgePoint, point2))
                 {
-                    if (
-                        IsBelowLine(point1, point2, c.XEdgePoint) ||
+                    if (IsBelowLine(point1, point2, c.XEdgePoint) ||
                         IsBelowLine(point2, point1, a.XEdgePoint))
                     {
                         TriangulateCase9Connected(i, a, b, c, d);
                         return;
                     }
                 }
-                else if (
-                    IsBelowLine(point1, point2, c.XEdgePoint) &&
-                    IsBelowLine(point2, a.YEdgePoint, point1))
+                else if (IsBelowLine(point1, point2, c.XEdgePoint) &&
+                         IsBelowLine(point2, a.YEdgePoint, point1))
                 {
                     TriangulateCase9Connected(i, a, b, c, d);
                     return;
                 }
-                AddQuadA(i, point1);
-                AddQuadD(i, point2);
+                surface.AddQuadA(i, point1);
+                wall.AddACAB(i, point1);
+                surface.AddQuadD(i, point2);
+                wall.AddBDCD(i, point2);
                 return;
             }
             if (IsBelowLine(point1, b.YEdgePoint, c.XEdgePoint))
@@ -774,8 +803,10 @@ public class VoxelGrid : MonoBehaviour
                 TriangulateCase9Connected(i, a, b, c, d);
                 return;
             }
-            AddQuadA(i, point1);
-            AddTriangleD(i);
+            surface.AddQuadA(i, point1);
+            wall.AddACAB(i, point1);
+            surface.AddTriangleD(i);
+            wall.AddBDCD(i);
             return;
         }
         if (sharp2)
@@ -785,32 +816,43 @@ public class VoxelGrid : MonoBehaviour
                 TriangulateCase9Connected(i, a, b, c, d);
                 return;
             }
-            AddTriangleA(i);
-            AddQuadD(i, point2);
+            surface.AddTriangleA(i);
+            wall.AddACAB(i);
+            surface.AddQuadD(i, point2);
+            wall.AddBDCD(i, point2);
             return;
         }
-        AddTriangleA(i);
+        surface.AddTriangleA(i);
+        wall.AddACAB(i);
+        surface.AddTriangleD(i);
+        wall.AddBDCD(i);
     }
 
-    private void TriangulateCase9Connected(int i, Voxel a, Voxel b, Voxel c, Voxel d)
+    private void TriangulateCase9Connected(
+        int i, Voxel a, Voxel b, Voxel c, Voxel d)
     {
+
         Vector2 n1 = a.xNormal;
         Vector2 n2 = b.yNormal;
         if (IsSharpFeature(n1, n2))
         {
             Vector2 point = ComputeIntersection(a.XEdgePoint, n1, b.YEdgePoint, n2);
-            if (IsInsideCell(point, a, d) && IsBelowLine(point, a.position, d.position))
+            if (IsInsideCell(point, a, d) &&
+                IsBelowLine(point, a.position, d.position))
             {
-                AddPentagonADToB(i, point);
+                surface.AddPentagonADToB(i, point);
+                wall.AddBDAB(i, point);
             }
             else
             {
-                AddQuadADToB(i);
+                surface.AddQuadADToB(i);
+                wall.AddBDAB(i);
             }
         }
         else
         {
-            AddQuadADToB(i);
+            surface.AddQuadADToB(i);
+            wall.AddBDAB(i);
         }
 
         n1 = c.xNormal;
@@ -818,204 +860,20 @@ public class VoxelGrid : MonoBehaviour
         if (IsSharpFeature(n1, n2))
         {
             Vector2 point = ComputeIntersection(c.XEdgePoint, n1, a.YEdgePoint, n2);
-            if (IsInsideCell(point, a, d) && IsBelowLine(point, d.position, a.position))
+            if (IsInsideCell(point, a, d) &&
+                IsBelowLine(point, d.position, a.position))
             {
-                AddPentagonADToC(i, point);
+                surface.AddPentagonADToC(i, point);
+                wall.AddACCD(i, point);
                 return;
             }
         }
-        AddQuadADToC(i);
+        surface.AddQuadADToC(i);
+        wall.AddACCD(i);
     }
     #endregion
 
-    #region Add quad-tri-pentagon-hexagon
 
-
-    private void AddTriangleA(int i)
-    {
-        AddTriangle(rowCacheMin[i], edgeCacheMin, rowCacheMin[i + 1]);
-    }
-
-    private void AddTriangleB(int i)
-    {
-        AddTriangle(rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMax);
-    }
-
-    private void AddTriangleC(int i)
-    {
-        AddTriangle(rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMin);
-    }
-
-    private void AddTriangleD(int i)
-    {
-        AddTriangle(rowCacheMax[i + 2], edgeCacheMax, rowCacheMax[i + 1]);
-    }
-    private void AddPentagonAB(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, edgeCacheMax, rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddPentagonAC(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, rowCacheMin[i + 1], rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1]);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddPentagonBD(int i, Vector2 extraVertex)
-    {
-        AddPentagon(
-            vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i + 2], rowCacheMin[i + 1]);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddPentagonCD(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax);
-        vertices.Add(extraVertex);
-    }
-
-
-    private void AddPentagonABC(int i)
-    {
-        AddPentagon(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1], edgeCacheMax, rowCacheMin[i + 2]);
-    }
-
-    private void AddPentagonABD(int i)
-    {
-        AddPentagon(rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin, rowCacheMax[i + 1], rowCacheMax[i + 2]);
-    }
-
-    private void AddPentagonACD(int i)
-    {
-        AddPentagon(rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax, rowCacheMin[i + 1], rowCacheMin[i]);
-    }
-
-    private void AddPentagonBCD(int i)
-    {
-        AddPentagon(rowCacheMax[i + 2], rowCacheMin[i + 2], rowCacheMin[i + 1], edgeCacheMin, rowCacheMax[i]);
-    }
-
-    private void AddQuadBCToA(int i)
-    {
-        AddQuad(edgeCacheMin, rowCacheMax[i], rowCacheMin[i + 2], rowCacheMin[i + 1]);
-    }
-
-    private void AddPentagonBCToA(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, edgeCacheMin, rowCacheMax[i], rowCacheMin[i + 2], rowCacheMin[i + 1]);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddQuadBCToD(int i)
-    {
-        AddQuad(edgeCacheMax, rowCacheMin[i + 2], rowCacheMax[i], rowCacheMax[i + 1]);
-    }
-
-    private void AddPentagonBCToD(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, edgeCacheMax, rowCacheMin[i + 2], rowCacheMax[i], rowCacheMax[i + 1]);
-        vertices.Add(extraVertex);
-    }
-    private void AddQuadADToB(int i)
-    {
-        AddQuad(rowCacheMin[i + 1], rowCacheMin[i], rowCacheMax[i + 2], edgeCacheMax);
-    }
-
-    private void AddPentagonADToB(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, rowCacheMin[i + 1], rowCacheMin[i], rowCacheMax[i + 2], edgeCacheMax);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddQuadADToC(int i)
-    {
-        AddQuad(rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i], edgeCacheMin);
-    }
-
-    private void AddPentagonADToC(int i, Vector2 extraVertex)
-    {
-        AddPentagon(vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i], edgeCacheMin);
-        vertices.Add(extraVertex);
-    }
-    private void AddQuadA(int i, Vector2 extraVertex)
-    {
-        AddQuad(vertices.Count, rowCacheMin[i + 1], rowCacheMin[i], edgeCacheMin);
-        vertices.Add(extraVertex);
-    }
-    private void AddQuadB(int i, Vector2 extraVertex)
-    {
-        AddQuad(vertices.Count, edgeCacheMax, rowCacheMin[i + 2], rowCacheMin[i + 1]);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddQuadC(int i, Vector2 extraVertex)
-    {
-        AddQuad(vertices.Count, edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 1]);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddQuadD(int i, Vector2 extraVertex)
-    {
-        AddQuad(vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2], edgeCacheMax);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddQuadAB(int i)
-    {
-        AddQuad(rowCacheMin[i], edgeCacheMin, edgeCacheMax, rowCacheMin[i + 2]);
-    }
-
-    private void AddQuadAC(int i)
-    {
-        AddQuad(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1], rowCacheMin[i + 1]);
-    }
-
-    private void AddQuadBD(int i)
-    {
-        AddQuad(rowCacheMin[i + 1], rowCacheMax[i + 1], rowCacheMax[i + 2], rowCacheMin[i + 2]);
-    }
-
-    private void AddQuadCD(int i)
-    {
-        AddQuad(edgeCacheMin, rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax);
-    }
-    private void AddQuadABCD(int i)
-    {
-        AddQuad(rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 2], rowCacheMin[i + 2]);
-    }
-
-    private void AddHexagonABC(int i, Vector2 extraVertex)
-    {
-        AddHexagon(
-            vertices.Count, edgeCacheMax, rowCacheMin[i + 2],
-            rowCacheMin[i], rowCacheMax[i], rowCacheMax[i + 1]);
-        vertices.Add(extraVertex);
-    }
-    private void AddHexagonABD(int i, Vector2 extraVertex)
-    {
-        AddHexagon(
-            vertices.Count, rowCacheMax[i + 1], rowCacheMax[i + 2],
-            rowCacheMin[i + 2], rowCacheMin[i], edgeCacheMin);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddHexagonACD(int i, Vector2 extraVertex)
-    {
-        AddHexagon(
-            vertices.Count, rowCacheMin[i + 1], rowCacheMin[i],
-            rowCacheMax[i], rowCacheMax[i + 2], edgeCacheMax);
-        vertices.Add(extraVertex);
-    }
-
-    private void AddHexagonBCD(int i, Vector2 extraVertex)
-    {
-        AddHexagon(
-            vertices.Count, edgeCacheMin, rowCacheMax[i],
-            rowCacheMax[i + 2], rowCacheMin[i + 2], rowCacheMin[i + 1]);
-        vertices.Add(extraVertex);
-    }
-    #endregion
 
     private static bool IsBelowLine(Vector2 p, Vector2 start, Vector2 end)
     {
@@ -1106,50 +964,5 @@ public class VoxelGrid : MonoBehaviour
             point.y = min.position.y;
         }
         return true;
-    }
-  
-    private void AddTriangle(int a, int b, int c)
-    {
-        triangles.Add(a);
-        triangles.Add(b);
-        triangles.Add(c);
-    }
-
-    private void AddQuad(int a, int b, int c, int d)
-    {
-        triangles.Add(a);
-        triangles.Add(b);
-        triangles.Add(c);
-        triangles.Add(a);
-        triangles.Add(c);
-        triangles.Add(d);
-    }
-
-    private void AddPentagon(int a, int b, int c, int d, int e)
-    {
-        triangles.Add(a);
-        triangles.Add(b);
-        triangles.Add(c);
-        triangles.Add(a);
-        triangles.Add(c);
-        triangles.Add(d);
-        triangles.Add(a);
-        triangles.Add(d);
-        triangles.Add(e);
-    }
-    private void AddHexagon(int a, int b, int c, int d, int e, int f)
-    {
-        triangles.Add(a);
-        triangles.Add(b);
-        triangles.Add(c);
-        triangles.Add(a);
-        triangles.Add(c);
-        triangles.Add(d);
-        triangles.Add(a);
-        triangles.Add(d);
-        triangles.Add(e);
-        triangles.Add(a);
-        triangles.Add(e);
-        triangles.Add(f);
     }
 }

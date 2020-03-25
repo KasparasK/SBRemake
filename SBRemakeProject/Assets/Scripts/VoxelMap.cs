@@ -51,9 +51,6 @@ public class VoxelMap : MonoBehaviour
         chunkSize = size / chunkResolution;
         voxelSize = chunkSize / voxelResolution;
 
-        Debug.Log(chunkSize +" "+ voxelSize);
-
-
         chunks = new VoxelGrid[chunkResolution * chunkResolution];
         for (int i = 0, y = 0; y < chunkResolution; y++)
         {
@@ -86,7 +83,8 @@ public class VoxelMap : MonoBehaviour
             center.x -= halfSize;
             center.y -= halfSize;
             visualization.localPosition = center;
-            visualization.localScale = Vector3.one * ((radiusIndex + 0.5f) * voxelSize * 2f);
+            Vector3 tempScale = Vector3.one * ((radiusIndex + 0.5f) * voxelSize * 2f);
+            visualization.localScale = new Vector3(tempScale.x,0.01f, tempScale.z);
             //----------------
             visualization.gameObject.SetActive(true);
         }

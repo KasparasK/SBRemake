@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: FlatBasic
-  m_Shader: {fileID: 4800000, guid: 14913f9cc540ee7438873d758228a146, type: 3}
+  m_Name: Wall
+  m_Shader: {fileID: 4800000, guid: 116c489d98c92354380460555e09c12f, type: 3}
   m_ShaderKeywords: 
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
