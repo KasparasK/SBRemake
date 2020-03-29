@@ -1,10 +1,12 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using System.Collections.Generic;
 
 public class VoxelGridWall : MonoBehaviour
 {
 
     private Mesh mesh;
+    private MeshCollider meshCollider;
 
     private List<Vector3> vertices, normals;
     private List<int> triangles;
@@ -12,15 +14,18 @@ public class VoxelGridWall : MonoBehaviour
     private int[] xEdgesMin, xEdgesMax;
     private int yEdgeMin, yEdgeMax;
     public float bottom, top;
-    public void Initialize(int resolution)
+    public void Initialize(int resolution, Action callback)
     {
         GetComponent<MeshFilter>().mesh = mesh = new Mesh();
+        meshCollider = GetComponent<MeshCollider>();
+        
         mesh.name = "VoxelGridWall Mesh";
         vertices = new List<Vector3>();
         normals = new List<Vector3>();
         triangles = new List<int>();
         xEdgesMin = new int[resolution];
         xEdgesMax = new int[resolution];
+        callback();
     }
 
     public void Clear()
@@ -29,6 +34,9 @@ public class VoxelGridWall : MonoBehaviour
         normals.Clear();
         triangles.Clear();
         mesh.Clear();
+        if(meshCollider == null)
+            meshCollider = GetComponent<MeshCollider>();
+        meshCollider.sharedMesh = null;
     }
 
     public void Apply()
@@ -36,6 +44,9 @@ public class VoxelGridWall : MonoBehaviour
         mesh.vertices = vertices.ToArray();
         mesh.normals = normals.ToArray();
         mesh.triangles = triangles.ToArray();
+        if (meshCollider == null)
+            meshCollider = GetComponent<MeshCollider>();
+        meshCollider.sharedMesh = mesh;
     }
 
     public void CacheXEdge(int i, Voxel voxel)
@@ -119,7 +130,7 @@ public class VoxelGridWall : MonoBehaviour
 
     public void AddACBD(int i)
     {
-        AddSection(yEdgeMin, yEdgeMax);
+        AddSection(yEdgeMin, yEdgeMax); // i virsu ziurinti siena - kampai
     }
 
     public void AddACBD(int i, Vector2 extraVertex)
@@ -129,13 +140,14 @@ public class VoxelGridWall : MonoBehaviour
 
     public void AddACCD(int i)
     {
-        AddSection(yEdgeMin, xEdgesMax[i]);
+        AddSection(yEdgeMin, xEdgesMax[i]); //i virsu ziurinti siena kairys kampas?
     }
 
     public void AddACCD(int i, Vector2 extraVertex)
     {
-        AddSection(yEdgeMin, xEdgesMax[i], extraVertex);
+       AddSection(yEdgeMin, xEdgesMax[i], extraVertex);
     }
+    //----
     public void AddBDAB(int i)
     {
         AddSection(yEdgeMax, xEdgesMin[i]);
@@ -188,12 +200,12 @@ public class VoxelGridWall : MonoBehaviour
 
     public void AddCDBD(int i)
     {
-        AddSection(xEdgesMax[i], yEdgeMax);
+       AddSection(xEdgesMax[i], yEdgeMax);
     }
 
     public void AddCDBD(int i, Vector2 extraVertex)
     {
-        AddSection(xEdgesMax[i], yEdgeMax, extraVertex);
+      AddSection(xEdgesMax[i], yEdgeMax, extraVertex);
     }
     private void AddSection(int a, int b)
     {

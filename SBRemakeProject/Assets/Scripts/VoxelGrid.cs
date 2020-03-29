@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 [SelectionBase]
 public class VoxelGrid : MonoBehaviour
 {
@@ -8,6 +9,8 @@ public class VoxelGrid : MonoBehaviour
     private float voxelSize, gridSize;
 
     private Material[] voxelMaterials;
+
+    private int callbacksCount;
 
     private Voxel[] voxels;
     public VoxelGridSurface surfacePrefab;
@@ -19,8 +22,11 @@ public class VoxelGrid : MonoBehaviour
     public VoxelGrid xNeighbor, yNeighbor, xyNeighbor;
     private Voxel dummyX, dummyY, dummyT;
     private float sharpFeatureLimit;
-    public void Initialize(int resolution, float size, float maxFeatureAngle)
+    private Action initCallback;
+    public void Initialize(int resolution, float size, float maxFeatureAngle, Action initCallback)
     {
+        this.initCallback = initCallback;
+        callbacksCount = 0;
         sharpFeatureLimit = Mathf.Cos(maxFeatureAngle * Mathf.Deg2Rad);
         this.resolution = resolution;
         gridSize = size;
@@ -37,32 +43,38 @@ public class VoxelGrid : MonoBehaviour
         {
             for (int x = 0; x < resolution; x++, i++)
             {
-                CreateVoxel(i, x, y);
+                    CreateVoxel(i, x, y);
+
             }
         }
 
         surface = Instantiate(surfacePrefab) as VoxelGridSurface;
         surface.transform.parent = transform;
         surface.transform.localPosition = Vector3.zero;
-        surface.Initialize(resolution);
+        surface.Initialize(resolution,InitCallback);
 
         wall = Instantiate(wallPrefab) as VoxelGridWall;
         wall.transform.parent = transform;
         wall.transform.localPosition = Vector3.zero;
-        wall.Initialize(resolution);
+        wall.Initialize(resolution, InitCallback);
+    }
 
-        Refresh();
+    void InitCallback()
+    {
+        callbacksCount++;
+        if (callbacksCount == 2)
+            initCallback();
     }
 
     private void CreateVoxel(int i, int x, int y)
     {
-       GameObject o = Instantiate(voxelPrefab) as GameObject;
+     /*  GameObject o = Instantiate(voxelPrefab) as GameObject;
         o.transform.parent = transform;
         o.transform.localPosition = new Vector3((x + 0.5f) * voxelSize, (y + 0.5f) * voxelSize, -0.01f);
         o.transform.localScale = Vector3.one * voxelSize * 0.1f;
-        voxelMaterials[i] = o.GetComponent<MeshRenderer>().material;
+        voxelMaterials[i] = o.GetComponent<MeshRenderer>().material;*/
         voxels[i] = new Voxel(x, y, voxelSize);
-     //   voxels[i].state = true;
+        voxels[i].state = true;
     }
 
     public void Apply(VoxelStencil stencil)
@@ -99,7 +111,6 @@ public class VoxelGrid : MonoBehaviour
         SetCrossings(stencil, xStart, xEnd, yStart, yEnd);
         Refresh();
     }
-
     private void SetCrossings(VoxelStencil stencil, int xStart, int xEnd, int yStart, int yEnd)
     {
         bool crossHorizontalGap = false;
@@ -185,10 +196,10 @@ public class VoxelGrid : MonoBehaviour
         }
     }
 
-    private void Refresh()
+    public void Refresh(Action endCallbackAction = null)
     {
-        SetVoxelColors();
-        Triangulate();
+      //  SetVoxelColors();
+        Triangulate(endCallbackAction);
     }
     private void CacheFirstCorner(Voxel voxel)
     {
@@ -224,7 +235,7 @@ public class VoxelGrid : MonoBehaviour
         }
     }
 
-    private void Triangulate()
+    private void Triangulate(Action endCallback = null)
     {
         surface.Clear();
         wall.Clear();
@@ -243,6 +254,9 @@ public class VoxelGrid : MonoBehaviour
 
         surface.Apply();
         wall.Apply();
+
+        endCallback?.Invoke();
+
     }
 
     private void TriangulateCellRows()

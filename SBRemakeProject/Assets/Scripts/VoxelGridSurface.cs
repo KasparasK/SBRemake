@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using System.Collections.Generic;
 
 public class VoxelGridSurface : MonoBehaviour
@@ -15,7 +16,7 @@ public class VoxelGridSurface : MonoBehaviour
     private int[] xEdgesMin, xEdgesMax;
     private int yEdgeMin, yEdgeMax;
 
-    public void Initialize(int resolution)
+    public void Initialize(int resolution, Action callback)
     {
         GetComponent<MeshFilter>().mesh = mesh = new Mesh();
         mesh.name = "VoxelGridSurface Mesh";
@@ -25,6 +26,7 @@ public class VoxelGridSurface : MonoBehaviour
         cornersMin = new int[resolution + 1];
         xEdgesMin = new int[resolution];
         xEdgesMax = new int[resolution];
+        callback();
     }
 
     public void Clear()
